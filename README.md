@@ -17,7 +17,7 @@ Please download this dataset from Google driver [download url](https://drive.goo
   - Test Dataset     -- channel_test.npy  (which has 390,000 samples for teting)
 
 # How to Run
-After download the dataset, it is good to run 
+After downloading the datasets, and put them to ./data folder, thenit is good to run them seperately:
   - mlp.py ----- to train and verify MLP model
   - cnn.py ----- to train and verify CNN model
   - rnn.py ----- to train and verify RNN model
