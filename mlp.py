@@ -1,5 +1,6 @@
 from tensorflow.python.keras import *
 from tensorflow.python.keras.layers import *
+from tensorflow.python.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from generations import *
 import tensorflow as tf
 from utility import *
@@ -43,20 +44,23 @@ def mlp(input):
     model.summary()
     return model
 
+es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=3)
+##lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=np.sqrt(0.1), cooldown=0, verbose=0, patience=5, min_lr=0.5e-6)
+lr_reducer = ReduceLROnPlateau(monitor='val_loss', factor=1, cooldown=0, verbose=0, patience=5, min_lr=0.5e-6)
 checkpoint = callbacks.ModelCheckpoint('./result/mlp_temp_trained_25_8_pilot.h5', monitor='val_bit_err',
                                        verbose=0, save_best_only=True, mode='min', save_weights_only=True)
 
 model = mlp(input_bits)
 training_time_total = 0
 training_time_start = time.time()
-epochs = 500     
+epochs = 1000     
 model_info = model.fit_generator(
     training_gen(1000, False, 25),
     steps_per_epoch=50,
     epochs=epochs,
     validation_data=validation_gen(1000, False, 25),
     validation_steps=1,
-    callbacks=[checkpoint],
+    callbacks=[lr_reducer, es, checkpoint],
     verbose=2)
 print(model_info.history.keys())
 duration = time.time() - training_time_start
