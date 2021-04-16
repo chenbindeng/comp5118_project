@@ -45,111 +45,159 @@ def mlp(input):
     model = Model(input_bits, out_put)
     return model
 
-base_model_es = EarlyStopping(monitor='val_bit_err', mode='min', verbose=1, patience=10)
-base_model_lr_reducer = ReduceLROnPlateau(monitor='val_bit_err', factor=np.sqrt(0.1), cooldown=0, 
-                                          verbose=1, patience=10, min_lr=0.5e-6)
+def base_model_train(base_channel, early_stop, adaptive_LR):
+    base_model_es = EarlyStopping(monitor='val_bit_err', mode='min', verbose=1, patience=10)
+    base_model_lr_reducer = ReduceLROnPlateau(monitor='val_bit_err', factor=np.sqrt(0.1), cooldown=0, 
+                                              verbose=1, patience=20, min_lr=0.5e-6)
 
-base_model_checkpoint = callbacks.ModelCheckpoint('./result/mlp_temp_trained_25_8_pilot_lr_no_es.h5', monitor='val_bit_err',
+    base_model_checkpoint = callbacks.ModelCheckpoint('./result/mlp_base_model_'+str(base_channel)+'.h5', monitor='val_bit_err',
                                                       verbose=0, save_best_only=True, mode='min', save_weights_only=False)
-checkPointList = [base_model_checkpoint]                                                  
-checkPointList += [base_model_es]
-checkPointList += [base_model_lr_reducer]
+    checkPointList = [base_model_checkpoint]                                                  
+    if (early_stop==True):
+        checkPointList += [base_model_es]
+    if (adaptive_LR == True):
+        checkPointList += [base_model_lr_reducer]
     
-base_model = mlp(input_bits)
-base_model.compile(optimizer='adam', loss='mse', metrics=[bit_err])
-print("Number of layers in the base model: ",len(base_model.layers))
-training_time_total = 0
-training_time_start = time.time()
-initial_epochs = 10
-epochs = 500
-base_model_info = base_model.fit(
-    training_gen(1000, False, 10),
-    steps_per_epoch=50,
-    epochs=epochs,
-    validation_data=validation_gen(1000, False, 10),
-    validation_steps=1,
-    callbacks = checkPointList, 
-    verbose=2)
-print(base_model_info.history.keys())
+    base_model = mlp(input_bits)
+    base_model.compile(optimizer='adam', loss='mse', metrics=[bit_err])
+    training_time_total = 0
+    training_time_start = time.time()
+    epochs = 500
+    base_model_info = base_model.fit(
+        offline_training_gen(1000, False, base_channel),
+        steps_per_epoch=50,
+        epochs=epochs,
+        validation_data=validation_gen(1000, False, base_channel),
+        validation_steps=1,
+        callbacks = checkPointList, 
+        verbose=2)
 
-duration = time.time() - training_time_start
-training_time_total += duration
+    duration = time.time() - training_time_start
+    training_time_total += duration
 
-training_average_time = training_time_total / epochs
-print("average_time: ", training_average_time)
-sio.savemat('./result/base_model_training_history.mat', base_model_info.history)
-plot_model_history(base_model_info)
+    training_average_time = training_time_total / epochs
 
-# fine tunning
-model = mlp(input_bits)
-model.load_weights('./result/mlp_temp_trained_25_8_pilot_lr_no_es.h5')
+    np.save('./result/base_model_training_snr_'+str(base_channel)+'_history.npy', base_model_info.history)
+    print('epoch: ', base_model_info.epoch)
+    np.save('./result/base_model_'+str(base_channel)+'_epoch.npy', base_model_info.epoch)
+    sio.savemat('./result/base_model_epoch.mat', {'epoch':base_model_info.epoch[-1]})
+    if (adaptive_LR == True):
+        plot_model_history(base_channel, base_model_info)
+    else:
+        plot_model_history_with_no_lr(base_model_info)
 
-base_learn_rate =  base_model_info.history['lr']
 
-adam = Adam(lr = np.array(base_learn_rate)[-1]/2)
+def fine_tune_model(train_channel, real_channel, early_stop, adaptive_learning_rate):
+    # fine tunning
+    model = mlp(input_bits)
+    model.load_weights('./result/mlp_base_model_'+str(train_channel)+'.h5')
 
-model.trainable = True
-fine_tune_at = 7
-for layer in model.layers[:fine_tune_at]:
-    layer.trainable =  False
+    base_model_info = np.load('./result/base_model_training_snr_'+str(train_channel)+'_history.npy',allow_pickle='TRUE').item()
 
-model.compile(optimizer=adam, loss='mse', metrics=[bit_err])
-fine_tuning_es = EarlyStopping(monitor='val_bit_err', mode='min', verbose=1, patience=20)
-fine_tuning_lr_reducer = ReduceLROnPlateau(monitor='val_bit_err', factor=np.sqrt(0.1), cooldown=0, verbose=1, patience=5, min_lr=0.1e-6)
-fine_tuning_checkpoint = callbacks.ModelCheckpoint('./result/fine_tuning_trained.h5', monitor='val_bit_err',
-                                                    verbose=0, save_best_only=True, mode='min', save_weights_only=False)
-model.summary()
-print("mode trainable parameters: ", len(model.trainable_variables))
+    learn_rate =  base_model_info['lr']
+    #learn_rate = np.reshape(learn_rate, (-1,1))
+    print("lr:", learn_rate)
 
-fine_tune_epochs = 100
-base_epoch = base_model_info.epoch[-1]
-print (base_epoch)
-total_epochs =  base_epoch + fine_tune_epochs
-print(total_epochs)
+    base_model_epoch = np.load('./result/base_model_'+str(train_channel)+'_epoch.npy',allow_pickle='TRUE')
 
-checkList = [fine_tuning_checkpoint]
-checkList += [fine_tuning_es]
-checkList += [fine_tuning_lr_reducer]
+    print('base_model_epoch: ', base_model_epoch)
 
-history_fine = model.fit(training_gen(1000, False, 25),
-                        steps_per_epoch=50,
-                        epochs=total_epochs,
-                        initial_epoch = base_epoch,
-                        validation_data=validation_gen(1000, False, 25),
-                        validation_steps=1,
-                        callbacks=checkList,
-                        verbose=2)
-sio.savemat('./result/fine_tuning_history.mat', history_fine.history)
-plot_fine_tuning_model_history(base_model_info, history_fine)
+    adam = Adam(lr = learn_rate[-1]/2)
+    model.compile(optimizer=adam, loss='mse', metrics=[bit_err])
 
-model = mlp(input_bits)
-model.load_weights('./result/fine_tuning_trained.h5')
-test_time_total = 0
-test_time_start = time.time()
-BER = []
+    model.trainable = True
+    fine_tune_at = 7
+    for layer in model.layers[:fine_tune_at]:
+        layer.trainable =  False
+
+    model.compile(optimizer=adam, loss='mse', metrics=[bit_err])
+    fine_tuning_es = EarlyStopping(monitor='val_bit_err', mode='min', verbose=1, patience=20)
+    fine_tuning_lr_reducer = ReduceLROnPlateau(monitor='val_bit_err', factor=np.sqrt(0.1), cooldown=0, verbose=1, patience=5, min_lr=0.1e-6)
+    fine_tuning_checkpoint = callbacks.ModelCheckpoint('./result/fine_tuning_trained_'+ str(real_channel)+'.h5', monitor='val_bit_err',
+                                                        verbose=0, save_best_only=True, mode='min', save_weights_only=False)
+    model.summary()
+    print("mode trainable parameters: ", len(model.trainable_variables))
+
+    fine_tune_epochs = 100
+    base_epoch = base_model_epoch[-1]
+    total_epochs =  base_epoch + fine_tune_epochs
+    print(total_epochs)
+
+    checkList = [fine_tuning_checkpoint]
+
+    if (early_stop == True):
+        checkList += [fine_tuning_es]
+    if (adaptive_learning_rate == True):
+        checkList += [fine_tuning_lr_reducer]
+    fine_tune_time_total = 0
+    fine_tune_start = time.time()
+
+    history_fine = model.fit(online_training_gen(1000, False, real_channel),
+                            steps_per_epoch=50,
+                            epochs=total_epochs,
+                            initial_epoch = base_epoch,
+                            validation_data=validation_gen(1000, False, real_channel),
+                            validation_steps=1,
+                            callbacks=checkList,
+                            verbose=2)
+
+    np.save('./result/fine_tuning_'+ str(real_channel) +'_history.h5',  history_fine.history)
+    duration = time.time() - fine_tune_start
+    fine_tune_time_total += duration
+    fine_tune_average_time = fine_tune_time_total / (history_fine.epoch[-1] - base_epoch)
+    print('fine_tune_average time: ', fine_tune_average_time)
+    plot_fine_tuning_model_history(train_channel, real_channel, base_model_info, history_fine)
+
+def prediction(base_channel, channel, transfer_learning):
+    model = mlp(input_bits)
+    if (transfer_learning == True):
+        model.load_weights('./result/fine_tuning_trained_' + str(channel) +'.h5')
+    else:
+        model.load_weights('./result/mlp_base_model_' + str(base_channel) +'.h5')
+    model.compile(optimizer='adam', loss='mse', metrics=[bit_err])
+    test_time_total = 0
+    test_time_start = time.time()
+    BER = []
+    snr_in_db = np.arange(5, 30, 5)
+    if (transfer_learning == True):
+        for i in snr_in_db:
+            y = model.evaluate(
+                validation_gen(10000, False, channel),
+                steps=1
+                )
+            BER.append(y[1])
+            print(y)
+    else:
+        for snr in snr_in_db:
+            y = model.evaluate(
+                validation_gen(10000, False, snr),
+                steps=1
+                )
+            BER.append(y[1])
+            print(y)
+    print(BER)
+    duration = time.time() - test_time_start
+    test_time_total += duration
+
+    test_average_time = test_time_total / len(snr_in_db)
+    print("average_time: ", test_average_time)
+    plt.semilogy(BER, "-*")
+    plt.grid(True)
+    plt.ylim(0.001, 0.2)
+    plt.xlabel('SNR (dB)')
+    plt.ylabel('BER')
+    plt.show()
+    BER_matlab = np.array(BER)
+    np.save('./result/prediction_result_' + str(channel) +'_dB.h5', BER)
+    #sio.savemat('./result/mlp_result_8_pilot_lr_no_es.mat', {'BER':BER_matlab, 'training_average_time':training_average_time, 'test_average_time':test_average_time})
+
+
+base_model_train_channel = 10
+#base_model_train(base_model_train_channel, False, True)   #model training with no early stop
+#base_model_train(base_model_train_channel, True, True)
 snr_in_db = np.arange(5, 30, 5)
-for snr in snr_in_db:
-    y = model.evaluate(
-        validation_gen(10000, False, snr),
-        steps=1
-    )
-    BER.append(y[1])
-    print(y)
-print(BER)
-duration = time.time() - test_time_start
-test_time_total += duration
+for transfer_channel in snr_in_db:
+    fine_tune_model(base_model_train_channel,transfer_channel,True, True)
+    prediction(base_model_train_channel, transfer_channel, True)
 
-test_average_time = test_time_total / len(snr_in_db)
-print("average_time: ", test_average_time)
-plt.semilogy(BER, "-*")
-plt.grid(True)
-plt.ylim(0.001, 0.2)
-plt.xlabel('SNR (dB)')
-plt.ylabel('BER')
-plt.show()
-BER_matlab = np.array(BER)
-sio.savemat('./result/mlp_result_8_pilot_lr_no_es.mat', {'BER':BER_matlab, 'training_average_time':training_average_time, 'test_average_time':test_average_time})
-
-#base_model_train(10, True, True)
-#fine_tune_model(15,True, True)
 
