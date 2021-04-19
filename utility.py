@@ -11,9 +11,45 @@ def plot_model_history(training_channel, model_history):
     #fig, axs = plt.subplots(1,3,figsize=(8,8))
     # summarize history for accuracy
     plt.figure(figsize=(15, 8))
-    plt.subplot(1,3,1)
-    plt.semilogy(range(1, len(model_history.history['bit_err']) + 1), model_history.history['bit_err'])
-    plt.semilogy(range(1, len(model_history.history['val_bit_err']) + 1), model_history.history['val_bit_err'])
+    plt.subplot(3,1,1)
+    plt.semilogy(range(1, len(model_history['bit_err']) + 1), model_history['bit_err'], label='Training')
+    plt.semilogy(range(1, len(model_history['val_bit_err']) + 1), model_history['val_bit_err'], label='Validation')
+    plt.ylabel('Bit Error')
+    #plt.xticks(np.arange(1,len(model_history.history['bit_err'])+1),len(model_history.history['bit_err'])/10)
+    plt.legend(loc='best')
+    plt.grid(True, which='both')
+    plt.xlabel('Epoch')
+
+    # summarize history for loss
+    plt.subplot(3,1,2)
+    plt.semilogy(range(1, len(model_history['loss']) + 1), model_history['loss'], label = 'Training')
+    plt.semilogy(range(1, len(model_history['val_loss']) + 1), model_history['val_loss'], label = 'Validation')
+    plt.ylabel('Loss')
+    plt.legend(loc='best')
+    plt.grid(True, which="both")
+    plt.xlabel('Epoch')
+
+    plt.subplot(3,1,3)
+    plt.semilogy(range(1,len(model_history['lr'])+1), model_history['lr'], label='Learning Rate')
+    print("bit_err min: ", np.min(model_history['bit_err']))
+    print("val_bit_err: ", np.min(model_history['val_bit_err']))
+    print("loss: ", np.min(model_history['loss']))
+    print("val_loss: ", np.min(model_history['val_loss']))
+    print("lr min: ", np.min(model_history['lr']))
+    plt.xlabel('Epoch')
+    plt.ylabel('Learning Rate')
+    plt.legend(loc='best')
+    plt.grid(True, which="both")
+
+    plt.savefig('./plot/base_model_training_' + str(training_channel) + 'dB.jpg')
+
+def plot_base_model_history(training_channel, model_history):
+    #fig, axs = plt.subplots(1,3,figsize=(8,8))
+    # summarize history for accuracy
+    plt.figure(figsize=(15, 8))
+    plt.subplot(3,1,1)
+    plt.semilogy(range(1, len(model_history['bit_err']) + 1), model_history['bit_err'])
+    plt.semilogy(range(1, len(model_history['val_bit_err']) + 1), model_history['val_bit_err'])
     plt.ylabel('Bit Error')
     #plt.xticks(np.arange(1,len(model_history.history['bit_err'])+1),len(model_history.history['bit_err'])/10)
     plt.legend(['Training', 'validation'], loc='best')
@@ -21,27 +57,27 @@ def plot_model_history(training_channel, model_history):
     plt.xlabel('Epoch')
 
     # summarize history for loss
-    plt.subplot(1,3,2)
-    plt.semilogy(range(1, len(model_history.history['loss']) + 1), model_history.history['loss'], label = 'Training')
-    plt.semilogy(range(1, len(model_history.history['val_loss']) + 1), model_history.history['val_loss'], label = 'Validation')
+    plt.subplot(3,1,2)
+    plt.semilogy(range(1, len(model_history['loss']) + 1), model_history['loss'], label = 'Training')
+    plt.semilogy(range(1, len(model_history['val_loss']) + 1), model_history['val_loss'], label = 'Validation')
     plt.ylabel('Loss')
     plt.legend(loc='best')
     plt.grid(True, which="both")
     plt.xlabel('Epoch')
 
-    plt.subplot(1,3,3)
-    plt.semilogy(range(1,len(model_history.history['lr'])+1), model_history.history['lr'])
-    print("bit_err min: ", np.min(model_history.history['bit_err']))
-    print("val_bit_err: ", np.min(model_history.history['val_bit_err']))
-    print("loss: ", np.min(model_history.history['loss']))
-    print("val_loss: ", np.min(model_history.history['val_loss']))
-    print("lr min: ", np.min(model_history.history['lr']))
+    plt.subplot(3,1,3)
+    plt.semilogy(range(1,len(model_history['lr'])+1), model_history['lr'], label='Learning Rate')
+    print("bit_err min: ", np.min(model_history['bit_err']))
+    print("val_bit_err: ", np.min(model_history['val_bit_err']))
+    print("loss: ", np.min(model_history['loss']))
+    print("val_loss: ", np.min(model_history['val_loss']))
+    print("lr min: ", np.min(model_history['lr']))
     plt.xlabel('Epoch')
     plt.ylabel('Learning Rate')
-    plt.legend(['Learning Rate'], loc='best')
+    plt.legend(loc='best')
     plt.grid(True, which="both")
 
-    plt.savefig('./plot/base_model_training_' + str(training_channel) + 'dB.jpg')
+    plt.savefig('./plot/base_model_training_' + str(training_channel) + '1_dB.jpg')
 
 
 def plot_model_history_with_no_lr(model_history):
@@ -82,28 +118,29 @@ def plot_fine_tuning_model_history(base_model_channel, transfer_channel, base_mo
 
     base_model_epoch = len(lr)
 
-    plt.figure(figsize=(15, 15))
+    plt.figure(figsize=(20, 15))
+    plt.rcParams.update({'font.size': 20})
     plt.subplot(3, 1, 1)
     plt.semilogy(range(1, len(bit_err) + 1), bit_err, label='Training')
     plt.semilogy(range(1, len(val_bit_err) + 1), val_bit_err, label='Validation')
     plt.legend(loc='best')
     plt.ylabel('bit error')
-    #plt.ylim([min(plt.ylim()),0.3])
+    #plt.ylim([min(plt.ylim()),0.8])
     plt.grid(True, which='both')
     #plt.title('Training and Validation bit error')
 
     plt.subplot(3, 1, 2)
-    plt.semilogy(range(1, len(loss) + 1), loss, label='Training Loss')
-    plt.semilogy(range(1, len(val_loss) + 1), val_loss, label='Validation Loss')
+    plt.semilogy(range(1, len(loss) + 1), loss, label='Training')
+    plt.semilogy(range(1, len(val_loss) + 1), val_loss, label='Validation')
     plt.legend(loc='best')
     plt.ylabel('loss')
     plt.grid(True, which='both')
     #plt.title('Training and Validation Loss')
 
     plt.subplot(3,1,3)
-    plt.semilogy(range(1, len(lr) + 1), lr)
+    plt.semilogy(range(1, len(lr) + 1), lr, label='Learning Rate')
     plt.xlabel('Epoch')
-    plt.xlabel('Learning Rate')
+    plt.ylabel('Learning Rate')
     plt.legend(loc='best')
     plt.grid(True, which="both")
 
@@ -118,7 +155,8 @@ def plot_fine_tuning_model_history(base_model_channel, transfer_channel, base_mo
 
     lr +=  history_fine.history['lr']
 
-    plt.figure(figsize=(15, 15))
+    plt.figure(figsize=(20, 15))
+    plt.rcParams.update({'font.size': 20})
     plt.subplot(3, 1, 1)
     plt.semilogy(range(1, len(bit_err) + 1), bit_err, label='Training')
     plt.semilogy(range(1, len(val_bit_err) + 1), val_bit_err, label='Validation')
@@ -128,7 +166,6 @@ def plot_fine_tuning_model_history(base_model_channel, transfer_channel, base_mo
     plt.grid(True, which='both')
     plt.ylabel('Bit Error')
     plt.xlabel('epoch')
-    plt.title('Training and bit error')
 
     plt.subplot(3, 1, 2)
     plt.semilogy(range(1, len(loss) + 1), loss, label='Training')
